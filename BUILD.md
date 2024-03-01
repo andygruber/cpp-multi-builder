@@ -7,6 +7,7 @@ With the help of examples, this section guides you through the process of initia
 If you are using conan for managing dependencies, it is recommended to also define install and packaging paths in the `conanfile.py`. The build examples in that chapter assume this is the case.
 
 ```python
+import os
 from conan import ConanFile, tools
 from conan.tools.cmake import CMakeDeps, CMakeToolchain, cmake_layout
 
