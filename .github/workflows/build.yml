@@ -1,0 +1,271 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  prepare:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    outputs:
+      matrixconfig: ${{ steps.generateMatrix.outputs.matrixconfig }}
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v4
+
+      - name: Set build configs
+        shell: pwsh
+        id: generateMatrix
+        run: |
+          Install-Module -Name PowerShell-yaml -Scope CurrentUser -Force
+          ./pipeline/createMatrix/createMatrix.ps1 -basedir "." -verbose -githubMatrix -mergeKeyFile pipeline/createMatrix/mergekeys.yml
+
+      # - name: Run bash script
+      #   id: generateMatrix
+      #   run: |
+      #     #echo 'matrixconfig={"GenericDrivers_debian_3_19_Release":{"os":"ubuntu-latest","directory":"home/runner/work/build-winccoa-manager/build-winccoa-manager/driver","version":"3.19","platform":"debian","buildtype":"Release","conan":true,"container_image":"support/3.19/debian_x86_64:api","displayname":"Generic Drivers (3.19) Debian 11 Release"},"GenericDrivers_debian_3_20_Release":{"os":"ubuntu-latest","directory":"home/runner/work/build-winccoa-manager/build-winccoa-manager/driver","version":"3.20","platform":"debian","buildtype":"Release","conan":true,"container_image":"develop_3.x/debian_x86_64:api","displayname":"Generic Drivers (3.20) Debian 12 Release"}}' >> $GITHUB_OUTPUT
+      #     echo 'matrixconfig={"config":[{"configName":"GenericDrivers_debian_3_19_Release","os":"ubuntu-latest","version":"3.19"},{"configName":"GenericDrivers_debian_3_20_Release","os":"ubuntu-latest","version":"3.20"}]}' >> $GITHUB_OUTPUT
+
+  build:
+    name: 'Build ${{ matrix.config.configName }}'
+    needs: [prepare]
+    strategy:
+      matrix: ${{ fromJson(needs.prepare.outputs.matrixconfig) }}
+    runs-on: ${{ matrix.config.github_runs_on }}
+    container:
+      image: ${{ matrix.config.container_image }}
+      options: --user root
+      # credentials:
+      #   username: ${{ secrets.DOCKERHUB_USER}}
+      #   password: ${{ secrets.DOCKERHUB_PASSWORD}}
+    env:
+      BUILDDIR: build/make
+      INSTALLDIR: build/install
+      DEPLOYDIR: build/deploy
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - run: |
+          # for Conan a date is used to store the cache
+          if [ "${{matrix.config.conan}}" == "true" ]; then
+            echo "NOW=$(date +'%Y-%m-%dT-%H%M%S')" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+        id: initvars
+        name: Set Variables
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: 3.23.0
+          ninjaVersion: latest
+          useCloudCache: true
+        if: runner.os == 'Windows'
+
+      - name: Install Conan
+        id: conan
+        uses: turtlebrowser/get-conan@main
+        if: runner.os == 'Windows' && matrix.config.conan
+
+      - name: Restore cached Conan packages
+        id: cache-conan-packages-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.conan2/p
+            ~/.conan/p
+          key: ${{matrix.config.platform}}-conan-${{matrix.config.version}}-${{matrix.config.buildtype}}-${{ steps.initvars.outputs.NOW }}
+          restore-keys: |
+            ${{matrix.config.platform}}-conan-${{matrix.config.version}}-${{matrix.config.buildtype}}
+        if: matrix.config.conan
+
+      - run: |
+          conan install . --output-folder=$BUILDDIR --profile:build='${{github.workspace}}/config/conan/${{matrix.config.platform}}_${{matrix.config.version}}.txt' --profile:host='${{github.workspace}}/config/conan/${{matrix.config.platform}}_${{matrix.config.version}}.txt' -s build_type=${{matrix.config.buildtype}} -c tools.cmake.cmaketoolchain:generator=Ninja || BUILD_MISSING=$?
+          if [[ "$BUILD_MISSING" == "1" ]]; then
+            echo "update_conan_cache=true" >> $GITHUB_OUTPUT
+            conan install . --output-folder=$BUILDDIR --profile:build='${{github.workspace}}/config/conan/${{matrix.config.platform}}_${{matrix.config.version}}.txt' --profile:host='${{github.workspace}}/config/conan/${{matrix.config.platform}}_${{matrix.config.version}}.txt' --build=missing -s build_type=${{matrix.config.buildtype}} -c tools.cmake.cmaketoolchain:generator=Ninja
+          else
+            echo "update_conan_cache=false" >> $GITHUB_OUTPUT
+          fi
+        working-directory: ${{ matrix.config.directory }}
+        name: 'Conan dependencies install Windows'
+        id: conanInstallWindows
+        shell: bash
+        if: runner.os == 'Windows' && matrix.config.conan
+
+      - run: |
+          conan profile detect
+          conan install . --output-folder=$BUILDDIR -s build_type=${{matrix.config.buildtype}} -c tools.cmake.cmaketoolchain:generator=Ninja || BUILD_MISSING=$?
+          if [[ "$BUILD_MISSING" == "1" ]]; then
+            echo "update_conan_cache=true" >> $GITHUB_OUTPUT
+            conan install . --output-folder=$BUILDDIR --build=missing -s build_type=${{matrix.config.buildtype}} -c tools.cmake.cmaketoolchain:generator=Ninja
+          else
+            echo "update_conan_cache=false" >> $GITHUB_OUTPUT
+          fi
+        working-directory: ${{ matrix.config.directory }}
+        name: 'Conan dependencies install Linux'
+        id: conanInstallLinux
+        shell: bash
+        if: runner.os == 'Linux' && matrix.config.conan
+
+      - name: Cache Conan packages
+        id: cache-conan-packages-save
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.conan2/p
+            ~/.conan/p
+          key: ${{steps.cache-conan-packages-restore.outputs.cache-primary-key}}
+        if: matrix.config.conan && (steps.conanInstallLinux.outputs.update_conan_cache == 'true' || steps.conanInstallWindows.outputs.update_conan_cache == 'true')
+
+      - run: |
+          if "${{matrix.config.conan}}" == "true" (
+            call "%BUILDDIR%/conanvcvars.bat"
+            cmake -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -G Ninja -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_BUILD_TYPE=${{matrix.config.buildtype}} -DCPACK_OUTPUT_FILE_PREFIX=%DEPLOYDIR% -DCMAKE_INSTALL_PREFIX=%INSTALLDIR% -S . -B %BUILDDIR%
+          ) else (
+            if "${{ matrix.config.init_compiler != '' }}" == "true" (
+              call ${{matrix.config.init_compiler}}
+            ) else (
+              echo "Windows compiler not set"
+            )
+            cmake -G Ninja -DCMAKE_BUILD_TYPE=${{matrix.config.buildtype}} -DCPACK_OUTPUT_FILE_PREFIX=%DEPLOYDIR% -DCMAKE_INSTALL_PREFIX=%INSTALLDIR% -S . -B %BUILDDIR%
+          )
+        working-directory: ${{ matrix.config.directory }}
+        name: 'CMake configure Windows'
+        shell: cmd  # Use cmd for Windows to make sure the conan vcvars script works correctly
+        if: runner.os == 'Windows'
+
+      - run: |
+          if [ "${{matrix.config.conan}}" == "true" ]; then
+            cmake -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -G Ninja -DCMAKE_BUILD_TYPE=${{matrix.config.buildtype}} -DCPACK_OUTPUT_FILE_PREFIX=$DEPLOYDIR -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -S . -B $BUILDDIR
+          else
+            cmake -G Ninja -DCMAKE_BUILD_TYPE=${{matrix.config.buildtype}} -DCPACK_OUTPUT_FILE_PREFIX=$DEPLOYDIR -DCMAKE_INSTALL_PREFIX=$INSTALLDIR -S . -B $BUILDDIR
+          fi
+        working-directory: ${{ matrix.config.directory }}
+        name: 'CMake configure Linux'
+        shell: bash
+        if: runner.os == 'Linux'
+
+      - run: |
+          output=$(cmake --build $BUILDDIR --target help)
+          if echo "$output" | grep -q "test: phony"; then
+            echo "testTargetExists=true" >> $GITHUB_OUTPUT
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              echo "${RUNNER_TEMP}/${{matrix.config.platform}}_${{matrix.config.version}}/bin" >> $GITHUB_PATH
+            fi
+          else
+            echo "testTargetExists=false" >> $GITHUB_OUTPUT
+          fi
+          if echo "$output" | grep -q "package: phony"; then
+            echo "cpackTargetExists=true" >> $GITHUB_OUTPUT
+          else
+            echo "cpackTargetExists=false" >> $GITHUB_OUTPUT
+          fi
+        working-directory: ${{ matrix.config.directory }}
+        name: 'Verify targets'
+        shell: bash
+        id: verifyTargets
+
+      - run: |
+          if "${{matrix.config.conan}}" == "true" (
+            call "%BUILDDIR%/conanvcvars.bat"
+          ) else (
+            if "${{ matrix.config.init_compiler != '' }}" == "true" (
+              call ${{matrix.config.init_compiler}}
+            ) else (
+              echo "Windows compiler not set"
+            )
+          )
+          cmake --build %BUILDDIR%
+          cmake --install %BUILDDIR%
+        working-directory: ${{ matrix.config.directory }}
+        name: 'CMake build Windows'
+        shell: cmd  # Use cmd for Windows to make sure the conan vcvars script works correctly
+        if: runner.os == 'Windows'
+
+      - run: |
+          cmake --build $BUILDDIR
+          cmake --install $BUILDDIR
+        working-directory: ${{ matrix.config.directory }}
+        name: 'CMake build Linux'
+        if: runner.os == 'Linux'
+    
+      - run: |
+          echo "Running tests..."
+          ctest -V --test-dir $BUILDDIR --output-on-failure --output-junit junit_global.xml
+        working-directory: ${{ matrix.config.directory }}
+        name: 'Run Tests Conditionally'
+        shell: bash
+        if: steps.verifyTargets.outputs.testTargetExists == 'true'
+
+      - name: Upload Test Results
+        if: steps.verifyTargets.outputs.testTargetExists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test Results (${{ matrix.config.configName }})
+          path: ${{ matrix.config.directory }}/**/ctest_*.xml
+
+      - name: Upload Installdir (unstripped) and PDBs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Installdir (unstripped) and PDBs (${{ matrix.config.configName }})
+          path: |
+            ${{ matrix.config.directory }}/${{ env.INSTALLDIR }}/**/*
+            ${{ matrix.config.directory }}/${{ env.BUILDDIR }}/**/*.pdb
+
+      - run: |
+          cpack -V --config $BUILDDIR/CPackConfig.cmake
+        working-directory: ${{ matrix.config.directory }}
+        name: 'Deployment Conditionally'
+        shell: bash
+        if: steps.verifyTargets.outputs.cpackTargetExists == 'true'
+
+      - name: Upload deployment
+        if: steps.verifyTargets.outputs.cpackTargetExists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Deployment (${{ matrix.config.configName }})
+          path: |
+            ${{ matrix.config.directory }}/${{ env.DEPLOYDIR }}/**/*
+
+  publish-test-results:
+    name: "Publish Tests Results"
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+
+      # only needed unless run with comment_mode: off
+      pull-requests: write
+
+      # only needed for private repository
+      contents: read
+
+      # only needed for private repository
+      issues: read
+    if: always()
+
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: Test*
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: "artifacts/**/*.xml"
