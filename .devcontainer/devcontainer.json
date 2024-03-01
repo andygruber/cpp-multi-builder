@@ -1,0 +1,50 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+{
+    // Uncomment the used compose files
+    "build": { "dockerfile": "Dockerfile" },
+
+    // Custom mounts can be done here or in docker-compose.custom.yml
+    "mounts": [
+        // mount a local directory
+        // "source=c:/work,target=/work2,type=bind"
+        "source=${localWorkspaceFolder},target=/work/${localWorkspaceFolderBasename},type=bind"
+    ],
+
+// ------------- end of typical modifications ---------------
+
+    // Name shown in the bottom-left corner in VS-Code
+//    "name": "winccoa-api",
+
+    "containerUser": "build",
+
+    // Configure tool-specific properties.
+    "customizations": {
+        // Configure properties specific to VS Code.
+        "vscode": {
+            // this list should reflect the list of recommended extensions from the .vscode/extensions.json
+            "extensions": [
+                "eamodio.gitlens",
+                "ms-vscode.cmake-tools",
+                "ms-vscode.cpptools-extension-pack"
+            ]
+        }
+    },
+
+    // These features are only working on Debian containers and need to be enabled manually
+    /*
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+            "version": "latest",
+            "moby": false
+        },
+        "ghcr.io/stuartleeks/dev-container-features/shell-history:0": {
+            "version": "latest"      
+        }
+    },
+    */
+
+    // this is the path inside the devcontainer where the repository is mounted on
+    // it needs to be created before starting the first DevContainer to avoid errors
+    "workspaceFolder": "/work/${localWorkspaceFolderBasename}"
+
+}
