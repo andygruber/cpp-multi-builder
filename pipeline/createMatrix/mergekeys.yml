@@ -1,0 +1,54 @@
+_win_msvc2022vc142: &_win_msvc2022vc142
+  platform: 'win'
+  version: 'msvc2022vc142'
+  github_runs_on: 'windows-2022'
+  init_compiler: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" amd64 -vcvars_ver=14.2'
+
+_win_msvc2022vc143: &_win_msvc2022vc143
+  platform: 'win'
+  version: 'msvc2022vc143'
+  github_runs_on: 'windows-2022'
+  init_compiler: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" amd64 -vcvars_ver=14.3'
+
+_win_msvc2022vc142_debug: &_win_msvc2022vc142_debug
+  <<: *_win_msvc2022vc142
+  buildtype: 'Debug'
+
+_win_msvc2022vc142_release: &_win_msvc2022vc142_release
+  <<: *_win_msvc2022vc142
+  buildtype: 'Release'
+
+_win_msvc2022vc142_relwithdebinfo: &_win_msvc2022vc142_relwithdebinfo
+  <<: *_win_msvc2022vc142
+  buildtype: 'RelWithDebInfo'
+
+_win_msvc2022vc143_debug: &_win_msvc2022vc143_debug
+  <<: *_win_msvc2022vc143
+  buildtype: 'Debug'
+
+_win_msvc2022vc143_release: &_win_msvc2022vc143_release
+  <<: *_win_msvc2022vc143
+  buildtype: 'Release'
+
+_win_msvc2022vc143_relwithdebinfo: &_win_msvc2022vc143_relwithdebinfo
+  <<: *_win_msvc2022vc143
+  buildtype: 'RelWithDebInfo'
+
+_debian_bookworm: &_debian_bookworm
+  platform: 'debian'
+  container_image: 'andygruber/cpp-multi-builder:debian-bookworm'
+  github_runs_on: 'ubuntu-latest'
+
+_debian_bullseye: &_debian_bullseye
+  platform: 'debian'
+  container_image: 'andygruber/cpp-multi-builder:debian-bullseye'
+  github_runs_on: 'ubuntu-latest'
+
+_debian_bookworm_relwithdebinfo: &_debian_bookworm_relwithdebinfo
+  <<: *_debian_bookworm
+  buildtype: 'RelWithDebInfo'
+
+_debian_bullseye_relwithdebinfo: &_debian_bullseye_relwithdebinfo
+  <<: *_debian_bullseye
+  buildtype: 'RelWithDebInfo'
+  
