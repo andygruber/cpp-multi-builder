@@ -1,0 +1,10 @@
+demo:
+  configuration:
+    win_msvc2022vc142_relwithdebinfo:
+      <<: *_win_msvc2022vc142_relwithdebinfo
+    win_msvc2022vc143_relwithdebinfo:
+      <<: *_win_msvc2022vc143_relwithdebinfo
+    debian_bookworm_relwithdebinfo:
+      <<: *_debian_bookworm_relwithdebinfo
+    debian_bullseye_relwithdebinfo:
+      <<: *_debian_bullseye_relwithdebinfo
