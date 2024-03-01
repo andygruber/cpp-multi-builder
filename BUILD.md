@@ -46,9 +46,9 @@ rem detect the conan profile, only need to run once
 conan profile detect
 
 rem install the dependencies using conan for the different build types
-conan install . --output-folder=%BUILDDIR% --profile ../config/conan/msvc2022vc143.txt --build=missing -s build_type=Debug
-conan install . --output-folder=%BUILDDIR% --profile ../config/conan/msvc2022vc143.txt --build=missing -s build_type=Release
-conan install . --output-folder=%BUILDDIR% --profile ../config/conan/msvc2022vc143.txt --build=missing -s build_type=RelWithDebInfo
+conan install . --output-folder=%BUILDDIR% --profile ../config/conan/win_msvc2022vc143.txt --build=missing -s build_type=Debug
+conan install . --output-folder=%BUILDDIR% --profile ../config/conan/win_msvc2022vc143.txt --build=missing -s build_type=Release
+conan install . --output-folder=%BUILDDIR% --profile ../config/conan/win_msvc2022vc143.txt --build=missing -s build_type=RelWithDebInfo
 
 rem create Visual Studio solution and open it in Visual Studio
 cmake --preset conan-default
@@ -78,7 +78,7 @@ rem detect the conan profile, only need to run once
 conan profile detect
 
 rem install the dependencies using conan for RelWithDebInfo
-conan install . --output-folder=%BUILDDIR% --build=missing --profile=../config/conan/msvc2022vc143.txt -s build_type=RelWithDebInfo -c tools.cmake.cmaketoolchain:generator=Ninja
+conan install . --output-folder=%BUILDDIR% --build=missing --profile=../config/conan/win_msvc2022vc143.txt -s build_type=RelWithDebInfo -c tools.cmake.cmaketoolchain:generator=Ninja
 
 rem Conan creates the correct VCvars script, init with this
 call "%BUILDDIR%/conanvcvars.bat"
