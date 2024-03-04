@@ -2,12 +2,14 @@ _win_msvc2022vc142: &_win_msvc2022vc142
   platform: 'win'
   version: 'msvc2022vc142'
   github_runs_on: 'windows-2022'
+  azure_vmImage: 'windows-2022'
   init_compiler: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" amd64 -vcvars_ver=14.2'
 
 _win_msvc2022vc143: &_win_msvc2022vc143
   platform: 'win'
   version: 'msvc2022vc143'
   github_runs_on: 'windows-2022'
+  azure_vmImage: 'windows-2022'
   init_compiler: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" amd64 -vcvars_ver=14.3'
 
 _win_msvc2022vc142_debug: &_win_msvc2022vc142_debug

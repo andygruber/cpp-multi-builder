@@ -1,0 +1,64 @@
+trigger:
+  - main
+
+parameters:
+  - name: stepsToPerform
+    displayName: Which steps to perform
+    type: string
+    default: Deploy
+    values:
+    - Deploy
+    - Build
+
+  - name: buildWindows
+    type: boolean
+    default: true
+
+  - name: buildLinux
+    type: boolean
+    default: true
+
+variables:
+  - name: System.Debug
+    value: true
+    
+stages:
+
+- stage: Eval
+  displayName: "Prepare Pipeline"
+  condition: succeeded()
+  dependsOn: [] #removes implicit dependency on previous stage, can run parallel to static ana 
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: SetVariables
+    displayName: "Set variables for pipeline"
+    steps:
+    - checkout: self
+      lfs: false
+      clean: true
+      fetchDepth: 1 # Fetch only one commit to improve checkout speed, we don't need history
+      displayName: "Checkout Repository"
+      
+    - task: PowerShell@2
+      inputs:
+        targetType: 'inline'
+        script: |
+          Install-Module -Name PowerShell-yaml -Scope CurrentUser -Force
+          $(Build.SourcesDirectory)\pipeline\createMatrix\createMatrix.ps1 -basedir "$(Build.SourcesDirectory)" -verbose -azpMatrix -mergeKeyFile pipeline\createMatrix\mergekeys.yml
+      displayName: 'Set build configs'
+      name: Matrix
+
+- ${{ if eq(parameters.buildWindows, true) }}:
+  - template: build-template.yml
+    parameters:
+      stepsToPerform: ${{ parameters.stepsToPerform }}
+      agentType: native
+      matrixName: 'Matrix.WindowsBuildConfigs'
+
+- ${{ if eq(parameters.buildLinux, true) }}:
+  - template: build-template.yml
+    parameters:
+      stepsToPerform: ${{ parameters.stepsToPerform }}
+      agentType: containerized
+      matrixName: 'Matrix.LinuxBuildConfigs'

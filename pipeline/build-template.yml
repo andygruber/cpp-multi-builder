@@ -1,0 +1,202 @@
+parameters:
+  - name: stepsToPerform
+    displayName: Which steps to perform
+    type: string
+    default: Deploy
+    values:
+      - Deploy
+      - Build
+
+  - name: agentType
+    type: string
+    default: native
+    values:
+      - native
+      - containerized
+
+  - name: matrixName
+    type: string
+    default: ""
+
+stages:
+  - stage: CI_${{parameters.agentType}}
+    displayName: "CI ${{parameters.agentType}} agents"
+    condition: succeeded()
+    dependsOn: [Eval]
+    jobs:
+      - job: CI
+        timeoutInMinutes: 260
+        workspace:
+          clean: all
+        strategy:
+          matrix: $[ stageDependencies.Eval.SetVariables.outputs['${{ parameters.matrixName }}'] ]
+
+        variables:
+          - name: BUILDDIR
+            value: "$(Build.BinariesDirectory)/build/make"
+          - name: INSTALLDIR
+            value: "$(Build.BinariesDirectory)/build/install"
+          - name: DEPLOYDIR
+            value: "$(Build.BinariesDirectory)/build/deploy"
+
+        ${{ if eq(parameters.agentType, 'containerized') }}:
+          pool:
+            vmImage: 'ubuntu-latest'
+          container:
+            image: $(container_image)
+            options: -v /etc/localtime:/etc/localtime:ro
+            # endpoint: Dockerhub # If you need access to a private container registry
+        ${{ else }}:
+          pool:
+            vmImage: $(azure_vmImage)
+
+        steps:
+          - checkout: self
+            clean: true
+            lfs: true
+
+          - ${{ if eq(parameters.agentType, 'native') }}:
+              - bash: |
+                  conan version &> /dev/null
+                  exit_status=$?
+
+                  if [ $exit_status -eq 0 ]; then
+                    echo "Conan is installed."
+                    conan version
+                  else
+                    echo "Conan is not installed. Attempting to install..."
+                    pip3 install conan
+                    conan version
+                  fi
+                displayName: 'Check conan and install if necessary'
+                condition: eq(variables.conan, 'true')
+
+              - bash: |
+                  conan install . --output-folder='$(BUILDDIR)' --profile:build='$(Build.SourcesDirectory)/config/conan/$(platform)_$(version).txt' --profile:host='$(Build.SourcesDirectory)/config/conan/$(platform)_$(version).txt' --build=missing -s build_type=$(buildtype) -c tools.cmake.cmaketoolchain:generator=Ninja
+                workingDirectory: "$(Build.SourcesDirectory)/$(directory)"
+                displayName: "Conan dependencies install"
+                condition: eq(variables.conan, 'true')
+          - ${{ else }}:
+              - bash: |
+                  conan profile detect
+                  conan install . --output-folder=$(BUILDDIR) --build=missing -s build_type=$(buildtype) -c tools.cmake.cmaketoolchain:generator=Ninja
+                workingDirectory: "$(Build.SourcesDirectory)/$(directory)"
+                displayName: "Conan dependencies install"
+                condition: eq(variables.conan, 'true')
+
+          - ${{ if eq(parameters.agentType, 'native') }}:
+              - task: CmdLine@2
+                inputs:
+                  script: |
+                    if "$(conan)" == "true" (
+                        call $(BUILDDIR)/conanvcvars.bat
+                        cmake -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -G Ninja -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_BUILD_TYPE=$(buildtype) -DCPACK_OUTPUT_FILE_PREFIX=$(DEPLOYDIR) -DCMAKE_INSTALL_PREFIX=$(INSTALLDIR) -S . -B $(BUILDDIR)
+                    ) else (
+                      if defined INIT_COMPILER (
+                        call $(INIT_COMPILER)
+                      ) else (
+                        echo "Windows compiler not set"
+                      )
+                      cmake -G Ninja -DCMAKE_BUILD_TYPE=$(buildtype) -DCPACK_OUTPUT_FILE_PREFIX=$(DEPLOYDIR) -DCMAKE_INSTALL_PREFIX=$(INSTALLDIR) -S . -B $(BUILDDIR)
+                    )
+                  workingDirectory: "$(Build.SourcesDirectory)/$(directory)"
+                displayName: "CMake configure"
+                condition: eq(variables.platform, 'win')
+          - ${{ else }}:
+              - script: |
+                  if [ "$(conan)" == "true" ]; then
+                    cmake -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -G Ninja -DCMAKE_BUILD_TYPE=$(buildtype) -DCPACK_OUTPUT_FILE_PREFIX=$(DEPLOYDIR) -DCMAKE_INSTALL_PREFIX=$(INSTALLDIR) -S . -B $(BUILDDIR)
+                  else
+                    cmake -G Ninja -DCMAKE_BUILD_TYPE=$(buildtype) -DCPACK_OUTPUT_FILE_PREFIX=$(DEPLOYDIR) -DCMAKE_INSTALL_PREFIX=$(INSTALLDIR) -S . -B $(BUILDDIR)
+                  fi
+                workingDirectory: "$(Build.SourcesDirectory)/$(directory)"
+                displayName: "CMake configure"
+
+          - bash: |
+              output=$(cmake --build '$(BUILDDIR)' --target help)
+              if echo "$output" | grep -q "test: phony"; then
+                echo "##vso[task.setvariable variable=testTargetExists]true"
+                if [ "$(platform)" = "win" ]; then
+                  echo '##vso[task.setvariable variable=path]$(Agent.TempDirectory)\$(platform)_$(version)\bin;$(PATH)'
+                fi
+              else
+                echo "##vso[task.setvariable variable=testTargetExists]false"
+              fi
+              if echo "$output" | grep -q "package: phony"; then
+                echo "##vso[task.setvariable variable=cpackTargetExists]true"
+              else
+                echo "##vso[task.setvariable variable=cpackTargetExists]false"
+              fi
+            workingDirectory: "$(Build.SourcesDirectory)/$(directory)"
+            failOnStderr: true
+            displayName: "Verify targets"
+
+          - ${{ if eq(parameters.agentType, 'native') }}:
+              - task: CmdLine@2
+                inputs:
+                  script: |
+                    if "$(conan)" == "true" (
+                        call $(BUILDDIR)/conanvcvars.bat
+                    ) else (
+                      if defined INIT_COMPILER (
+                        call $(INIT_COMPILER)
+                      ) else (
+                        echo "Windows compiler not set"
+                      )
+                    )
+                    cmake --build $(BUILDDIR)
+                    cmake --install $(BUILDDIR)
+                  workingDirectory: "$(Build.SourcesDirectory)/$(directory)"
+                displayName: "CMake build"
+                condition: eq(variables.platform, 'win')
+          - ${{ else }}:
+              - script: |
+                  cmake --build $(BUILDDIR)
+                  cmake --install $(BUILDDIR)
+                workingDirectory: "$(Build.SourcesDirectory)/$(directory)"
+                displayName: "CMake build"
+
+          - script: |
+              echo "Running tests..."
+              ctest -V --test-dir $(BUILDDIR) --output-on-failure --output-junit junit_global.xml
+            displayName: "Run Tests Conditionally"
+            condition: eq(variables.testTargetExists, 'true')
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: "JUnit"
+              testResultsFiles: "**/ctest_*.xml"
+              searchFolder: "$(BUILDDIR)"
+              buildPlatform: "$(platform)_$(version)"
+              buildConfiguration: "$(buildtype)"
+            displayName: "Publish Test Results"
+            condition: eq(variables.testTargetExists, 'true')
+
+          - ${{ if eq(parameters.stepsToPerform, 'Deploy') }}:
+              - script: |
+                  cpack -V --config $(BUILDDIR)/CPackConfig.cmake
+                displayName: Deployment Conditionally
+                workingDirectory: $(Build.SourcesDirectory)/$(directory)
+                condition: eq(variables.cpackTargetExists, 'true')
+
+              - task: CopyFiles@2
+                displayName: 'Prepare files for Upload'
+                inputs:
+                  SourceFolder: $(Build.BinariesDirectory)/build
+                  CleanTargetFolder: true
+                  Contents: |
+                    $(BUILDDIR)/**/*.pdb
+                    $(INSTALLDIR)/**/*
+                  TargetFolder: $(Build.ArtifactStagingDirectory)/install-pdb
+
+              - task: PublishBuildArtifacts@1
+                displayName: Upload Installdir (unstripped) and PDBs
+                inputs:
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)/install-pdb
+                  ArtifactName: Installdir (unstripped) and PDBs $(System.JobName)
+
+              - task: PublishBuildArtifacts@1
+                displayName: Upload Deployment
+                inputs:
+                  PathtoPublish: $(DEPLOYDIR)
+                  ArtifactName: Deployment $(System.JobName)
