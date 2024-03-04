@@ -1,7 +1,7 @@
 # Using Azure Pipelines with C++ Projects
 
 This guide describes how to use Azure Pipelines to build and test C++ projects.
-It uses a pipeline `azure-pipeline.yml' and a template `build-template.yml' for a comprehensive CI/CD pipeline.
+It uses a pipeline `azure-pipeline.yml` and a template `build-template.yml` for a comprehensive CI/CD pipeline.
 
 ## Prerequisites
 

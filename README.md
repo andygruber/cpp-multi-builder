@@ -87,7 +87,7 @@ Testing also requires the [googletest](https://github.com/google/googletest) fra
         self.requires("gtest/1.14.0")
 ```
 
-A complete example of a `conanfile.py` can be found [here](BUILD.md#conan).
+A complete example of a `conanfile.py` can be found [here](.docs/BUILD.md#conan).
 
 ### Packaging details
 
