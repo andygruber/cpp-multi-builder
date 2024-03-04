@@ -1,6 +1,6 @@
 # C++ Multi Builder
 
-This GitHub repository provides a ready-to-use GitHub Action to build C++ projects.
+This GitHub repository provides a ready-to-use GitHub Action and [Azure Pipeline](.docs/AZURE.md) to build C++ projects.
 It is designed to lower the entry barrier for developers and allow easy building, unit testing, and packaging of C++ projects for multiple combinations of OS using a single C++ source code.
 
 ## Features
@@ -10,7 +10,8 @@ It is designed to lower the entry barrier for developers and allow easy building
 - **C++ Package Manager Support**: Conan package manager is supported out of the box for managing C++ dependencies.
 - **Automated Testing and Packaging**: Includes support for unit testing and packaging of your projects.
 - **Debug files available**: PDB and unstripped files are kept beside the build artifacts.
-- **Caching Support**: Conan packages are cached automatically
+- **Caching Support**: Conan packages are cached automatically in GitHub Actions.
+- **Multiple CI platforms**: Use GitHub Actions or Azure Pipelines. Also works on premise or with self hosted runners/agents.
 
 ## Getting Started
 
@@ -147,6 +148,9 @@ If your project structure does not already include a test directory, create one 
 
 The `build.yml` GitHub Action workflow file orchestrates the build process.
 It prepares the build environment, installs necessary dependencies, and runs the build according to configurations specified in `build-config.yml`.
+
+Usage in Azure DevOps is described [here](.docs/AZURE.md).
+
 This process is triggered by push or pull request events to the main branch, or can be manually dispatched.
 
 When running the build, certain directories are set automatically:
