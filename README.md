@@ -169,7 +169,7 @@ If you use private container images, uncomment the following lines in `build.yml
 
 ## Local Build Environment Setup
 
-For detailed instructions on setting up your local build environment, including configuring Conan and CMake for various build types, please see the [Build Environment Setup Guide](BUILD.md).
+For detailed instructions on setting up your local build environment, including configuring Conan and CMake for various build types, please see the [Build Environment Setup Guide](.docs/BUILD.md).
 This guide provides step-by-step instructions to help you get started quickly and efficiently.
 
 ## Support
